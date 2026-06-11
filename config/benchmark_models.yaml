@@ -1,0 +1,426 @@
+# 模型平台
+platforms:
+  yunwu:
+    provider: jz_openai
+    api_base_env: YUNWU_API_BASE_URL
+    api_key_env: YUNWU_API_KEY
+    default_base_url: https://yunwu.ai/v1
+
+  jz_duanju:
+    provider: jz_openai
+    api_base_env: JZ_API_BASE_URL
+    api_key_env: JZ_API_KEY
+    default_base_url: https://jzapi.duanju.com/v1
+
+# 评测裁判模型（固定）
+judge_models:
+  vlm:
+    provider: openai_compatible
+    api_base_env: JZ_API_BASE_URL
+    api_key_env: JZ_API_KEY
+    model_env: JZ_JUDGE_VLM_MODEL
+    default_model: gemini-2.5-flash
+  text:
+    provider: openai_compatible
+    api_base_env: JZ_API_BASE_URL
+    api_key_env: JZ_API_KEY
+    model_env: JZ_JUDGE_TEXT_MODEL
+    default_model: gemini-2.5-flash
+
+# 被测生成模型
+generation_models:
+  text_model:
+    - id: gemini-3.5-flash
+      display_name: gemini-3.5-flash
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-3.5-flash
+      enabled: true
+
+    - id: deepseek-v4-flash
+      display_name: deepseek-v4-flash
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: deepseek-v4-flash
+      enabled: true
+
+    - id: deepseek-v4-pro
+      display_name: deepseek-v4-pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: deepseek-v4-pro
+      enabled: true
+
+    - id: qwen3-rerank
+      display_name: qwen3-rerank
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: qwen3-rerank
+      enabled: true
+
+    - id: text-embedding-v4
+      display_name: text-embedding-v4
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: text-embedding-v4
+      enabled: true
+
+    - id: qwen-turbo
+      display_name: qwen-turbo
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: qwen-turbo
+      enabled: true
+
+    - id: claude-sonnet-4-6
+      display_name: claude-sonnet-4-6
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: claude-sonnet-4-6
+      enabled: true
+
+    - id: gpt-5.4
+      display_name: gpt-5.4
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gpt-5.4
+      enabled: true
+
+    - id: gpt-5.5
+      display_name: gpt-5.5
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gpt-5.5
+      enabled: true
+
+    - id: gemini-2.5-pro
+      display_name: gemini-2.5-pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-2.5-pro
+      enabled: true
+
+    - id: gemini-3-flash-preview
+      display_name: gemini-3-flash-preview
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-3-flash-preview
+      enabled: true
+
+    - id: gemini-3.1-pro-preview
+      display_name: gemini-3.1-pro-preview
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-3.1-pro-preview
+      enabled: true
+
+    - id: gemini-2.5-flash
+      display_name: gemini-2.5-flash
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-2.5-flash
+      enabled: true
+
+    - id: gemini-2.5-flash-vision
+      display_name: gemini-2.5-flash (legacy)
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: chat_vision
+      model: gemini-2.5-flash
+      enabled: false
+
+    - id: qwen3-vl-32b
+      provider: openai_compatible
+      api_base_env: OPENAI_BASE_URL
+      api_key_env: OPENAI_API_KEY
+      model: Qwen/Qwen3-VL-32B-Instruct
+      enabled: false
+
+  image_model:
+    - id: jiumeng-seedream-4
+      display_name: 九梦
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Seedream 4.0
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiumeng-3-seedream-3
+      display_name: 九梦3.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Seedream 3.0
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiumeng-4-seedream-4
+      display_name: 九梦4.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Seedream 4.0
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiumeng-4.5-seedream-4.5
+      display_name: 九梦4.5
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Seedream 4.5
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiumeng-5-seedream-5-lite
+      display_name: 九梦5.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Seedream 5.0 Lite
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiuwan-wan-2.6
+      display_name: 九万
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Wan 2.6
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiuwan-2.7-wan-2.7
+      display_name: 九万2.7
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Wan 2.7
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiudu-vidu-q2
+      display_name: 九度
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Vidu Q2
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jimeng-4.0
+      display_name: 即梦4.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: 即梦 4.0
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jimeng-4.6
+      display_name: 即梦4.6
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: 即梦 4.6
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jimeng-5.0-lite
+      display_name: 即梦5.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: 即梦 5.0 Lite
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiuji-2.0-gpt-image-2
+      display_name: 九极2.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: GPT Image 2
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiujiao-pro-nano-banana-pro
+      display_name: 九蕉Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Nano Banana Pro
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: jiujiao-2-nano-banana-2
+      display_name: 九蕉2
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: images_edit
+      model: Nano Banana 2
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: true
+
+    - id: gpt-image-2-all
+      display_name: 云雾 gpt-image-2-all
+      platform: yunwu
+      provider: jz_openai
+      api_method: images_edit
+      model: gpt-image-2-all
+      size: "1024x1024"
+      response_format: b64_json
+      n: 1
+      enabled: true
+
+    - id: gpt-image-2-all-t2i
+      display_name: 云雾 gpt-image-2-all (文生图)
+      platform: yunwu
+      provider: jz_openai
+      api_method: images_generate
+      model: gpt-image-2-all
+      size: "1024x1024"
+      response_format: b64_json
+      enabled: false
+
+    - id: internal-image-api
+      provider: http_multipart
+      endpoint_env: IMAGE_GEN_API_ENDPOINT
+      api_key_env: IMAGE_GEN_API_KEY
+      api_method: http_multipart
+      enabled: false
+
+  video_model:
+    - id: jiudu-2.0-pro
+      display_name: 九度 2.0 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Vidu Q2 Pro
+      enabled: true
+
+    - id: jiudu-2.0-fast
+      display_name: 九度 2.0 Fast
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Vidu Q2 Pro Fast
+      enabled: true
+
+    - id: jiudu-3.0
+      display_name: 九度 3.0
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Vidu Q3
+      enabled: true
+
+    - id: jiudu-3.0-pro
+      display_name: 九度 3.0 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Vidu Q3 Pro
+      enabled: true
+
+    - id: jiudu-3.0-fast
+      display_name: 九度 3.0 Fast
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Vidu Q3 turbo
+      enabled: true
+
+    - id: jiumeng-1.0-fast
+      display_name: 九梦 1.0 Fast
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Seedance 1.0 Pro Fast
+      enabled: true
+
+    - id: jiumeng-1.5-pro
+      display_name: 九梦 1.5 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Seedance 1.5 Pro
+      enabled: true
+
+    - id: jiumeng-2.0-pro
+      display_name: 九梦 2.0 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: Seedance 2.0
+      enabled: true
+
+    - id: jiuwan-2.0-fast
+      display_name: 九万 2.0 Fast
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: 九万 2.2 Flash
+      enabled: true
+
+    - id: jiuwan-2.5-pro
+      display_name: 九万 2.5 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: 九万 2.6
+      enabled: true
+
+    - id: jiuwan-2.5-fast
+      display_name: 九万 2.5 Fast
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: 九万 2.6 Flash
+      enabled: true
+
+    - id: jiuma-1.0-pro
+      display_name: 九马 1.0 Pro
+      platform: jz_duanju
+      provider: jz_openai
+      api_method: video_generate
+      model: HappyHorse 1.0
+      enabled: true
+
+default_weights:
+  s1_text_output:
+    instruction_following: 0.45
+    image_grounding: 0.40
+    output_quality: 0.15
+  s2_image_output:
+    task_compliance: 0.55
+    image_quality: 0.25
+    source_preservation: 0.20

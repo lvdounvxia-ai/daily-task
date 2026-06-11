@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>模型效果评测平台</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20260611i" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>模型效果评测平台</h1>
+      <p class="subtitle">模型 · Prompt · 参考图 · 结果 同行展示</p>
+    </div>
+    <button class="btn ghost" id="btnReloadConfig">⟳ 刷新模型配置</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-category="text">文本生成</button>
+    <button class="tab" data-category="image">图片生成</button>
+    <button class="tab" data-category="video">视频生成</button>
+  </nav>
+
+  <div class="action-bar">
+    <div class="action-left">
+      <span class="badge" id="categoryBadge">文本生成</span>
+      <span class="batch-count" id="batchCount">0 条就绪 / 共 1 行</span>
+      <span class="batch-meta-inline hidden" id="batchMeta"></span>
+    </div>
+    <div class="action-right">
+      <label class="inline-check"><input type="checkbox" id="runEval" checked /> 自动评测</label>
+      <button class="btn primary" id="btnRun">▶ 批量执行测试</button>
+    </div>
+  </div>
+
+  <main class="workspace">
+    <section class="panel main-panel">
+      <div class="top-fields">
+        <div class="field compact">
+          <label>任务类型</label>
+          <select id="taskSelect"></select>
+        </div>
+        <div class="field compact grow">
+          <label>附加文本（可选，应用于全部样本）</label>
+          <textarea id="inputText" rows="1" placeholder="可输入原文、旁白等补充文本..."></textarea>
+        </div>
+      </div>
+
+      <div class="sample-table">
+        <div class="sample-tools">
+          <button type="button" class="btn ghost btn-sync-prompts hidden" id="btnSyncPrompts">一键同步 Prompt</button>
+        </div>
+        <div class="sample-table-header">
+          <span class="col-add"></span>
+          <span class="col-idx">#</span>
+          <span class="col-model">模型</span>
+          <span class="col-prompt">Prompt</span>
+          <span class="col-image">参考图</span>
+          <span class="col-text-file">上传文本</span>
+          <span class="col-result">结果</span>
+          <span class="col-del"></span>
+        </div>
+        <div class="sample-editor">
+          <button type="button" class="btn-add-row" id="btnAddRow" title="添加一行">+</button>
+          <div class="sample-rows" id="sampleRows"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js?v=20260611i"></script>
+</body>
+</html>

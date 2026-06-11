@@ -1,0 +1,76 @@
+# 业务任务定义：图片 + 指令提示词 → 输出（文本或图片）
+# 与 data/prompt/prompt.md 对齐
+
+tasks:
+  - id: text_structured_prompt
+    name: 结构化中文提示词生成
+    scenario: s1_image_instruction_to_text
+    category: text_model
+    enabled: true
+    instruction: |
+      请根据输入图片，生成结构化中文提示词。
+      必须包含以下 5 个字段，并以 JSON 输出：
+      1. 主题描述：画面主体、人物、动作、关键物体
+      2. 环境：地点、场景、时间、氛围
+      3. 光影：光源方向、明暗对比、色调
+      4. 镜头语言：景别、构图、视角、景深
+      5. 风格：画风、质感、艺术风格
+
+      输出格式示例：
+      {
+        "主题描述": "...",
+        "环境": "...",
+        "光影": "...",
+        "镜头语言": "...",
+        "风格": "..."
+      }
+
+  - id: image_hd_4k
+    name: 图片高清4K处理
+    scenario: s2_image_instruction_to_image
+    category: image_model
+    enabled: true
+    instruction: |
+      将输入图片进行高清 4K 处理，要求：
+      - 保持原图内容与构图不变
+      - 提升清晰度与细节
+      - 不添加原图不存在的主体或场景
+
+  - id: image_matting
+    name: 抠图透明背景
+    scenario: s2_image_instruction_to_image
+    category: image_model
+    enabled: true
+    instruction: |
+      提取图像主体，生成 PNG 透明背景图，要求：
+      - 主体边缘干净，无明显残留背景
+      - 不丢失主体关键部分
+      - 输出为带 alpha 通道的 PNG
+
+  - id: image_outpaint_1_5x
+    name: 等比例扩图1.5倍
+    scenario: s2_image_instruction_to_image
+    category: image_model
+    enabled: true
+    instruction: |
+      将图片等比例扩大 1.5 倍，要求：
+      - 原图区域内容保持不变
+      - 扩展区域自然延续场景
+      - 整体等比例放大，不改变主体比例关系
+    expected:
+      scale: 1.5
+      keep_aspect: true
+
+  - id: image_outpaint_9_16_2x
+    name: 9:16比例扩图2倍
+    scenario: s2_image_instruction_to_image
+    category: image_model
+    enabled: true
+    instruction: |
+      将图片按 9:16 比例扩大 2 倍，要求：
+      - 原图内容完整保留在画面内
+      - 最终画布宽高比为 9:16
+      - 扩展区域与原有场景风格一致
+    expected:
+      aspect_ratio: "9:16"
+      scale: 2.0
