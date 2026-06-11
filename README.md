@@ -49,6 +49,24 @@ http://127.0.0.1:8080/
 - `nginx` 反向代理到 `8080`
 - 容器化部署到支持 Python 的平台
 
+### Render 一键部署
+
+本仓库已包含 `render.yaml`，可直接用于 Render。
+
+部署步骤：
+
+1. 登录 Render
+2. 选择 `New +` -> `Blueprint`
+3. 连接 GitHub 仓库 `lvdounvxia-ai/daily-task`
+4. 在 Render 后台配置环境变量：
+   - `JZ_API_BASE_URL`
+   - `JZ_API_KEY`
+   - `JZ_JUDGE_VLM_MODEL`
+   - `JZ_JUDGE_TEXT_MODEL`
+5. 完成部署后，Render 会分配一个公网地址
+
+如果仅看页面结构，不配置模型 API 也能打开网页；但执行生成与评测功能时仍需要有效 API Key。
+
 ## 注意事项
 
 - 不要提交 `.env`
