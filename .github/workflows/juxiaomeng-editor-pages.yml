@@ -1,0 +1,75 @@
+name: Deploy juxiaomeng editor to Pages
+
+on:
+  push:
+    branches: [juxiaomeng-editor]
+    paths:
+      - ".github/workflows/juxiaomeng-editor-pages.yml"
+      - "projects/juxiaomeng-editor/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: juxiaomeng-editor-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: projects/juxiaomeng-editor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: projects/juxiaomeng-editor/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Prepare Pages artifact
+        working-directory: .
+        run: |
+          New-Item -ItemType Directory -Force -Path page-artifact/juxiaomeng-editor | Out-Null
+          Copy-Item -Path projects/juxiaomeng-editor/dist/* -Destination page-artifact/juxiaomeng-editor -Recurse -Force
+          @'
+          <!doctype html>
+          <html lang="zh-CN">
+            <head>
+              <meta charset="UTF-8" />
+              <meta http-equiv="refresh" content="0; url=./juxiaomeng-editor/" />
+              <title>剧小梦分镜编辑器</title>
+            </head>
+            <body>
+              <p>正在跳转到 <a href="./juxiaomeng-editor/">剧小梦分镜编辑器</a> ...</p>
+            </body>
+          </html>
+          '@ | Set-Content -Path page-artifact/index.html -Encoding UTF8
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: page-artifact
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
