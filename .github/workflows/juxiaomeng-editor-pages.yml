@@ -46,9 +46,9 @@ jobs:
       - name: Prepare Pages artifact
         working-directory: .
         run: |
-          New-Item -ItemType Directory -Force -Path page-artifact/juxiaomeng-editor | Out-Null
-          Copy-Item -Path projects/juxiaomeng-editor/dist/* -Destination page-artifact/juxiaomeng-editor -Recurse -Force
-          @'
+          mkdir -p page-artifact/juxiaomeng-editor
+          cp -R projects/juxiaomeng-editor/dist/* page-artifact/juxiaomeng-editor/
+          cat > page-artifact/index.html <<'EOF'
           <!doctype html>
           <html lang="zh-CN">
             <head>
@@ -60,7 +60,7 @@ jobs:
               <p>正在跳转到 <a href="./juxiaomeng-editor/">剧小梦分镜编辑器</a> ...</p>
             </body>
           </html>
-          '@ | Set-Content -Path page-artifact/index.html -Encoding UTF8
+          EOF
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
