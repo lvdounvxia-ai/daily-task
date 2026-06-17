@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 type ModelId = "gpt-4.1" | "claude-3.7" | "deepseek-r1" | "gemini-2.5";
 type MessageRole = "assistant" | "user";
 type DockSide = "left" | "right";
+type FeedbackType = "up" | "down";
 
 interface ModelOption {
   id: ModelId;
@@ -20,6 +21,15 @@ interface ChatMessage {
   modelId?: ModelId;
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  preview: string;
+  updatedAt: number;
+  modelId: ModelId;
+  messages: ChatMessage[];
+}
+
 const modelOptions: ModelOption[] = [
   { id: "gpt-4.1", label: "GPT-4.1", hint: "更均衡，适合页面修改和说明" },
   { id: "claude-3.7", label: "Claude 3.7", hint: "更偏结构化梳理和细节建议" },
@@ -28,9 +38,9 @@ const modelOptions: ModelOption[] = [
 ];
 
 const quickPrompts = [
-  "帮我继续细化这个页面",
-  "给这个布局提 3 个优化建议",
-  "把当前交互整理成待办",
+  "帮我梳理这段剧情的情绪起伏",
+  "检查这个剧本有没有逻辑 bug",
+  "这场对白还可以怎么改得更有张力",
 ];
 
 const initialMessages: ChatMessage[] = [
@@ -41,6 +51,57 @@ const initialMessages: ChatMessage[] = [
     content:
       "嗨，我是剧小梦，你的漫剧创作搭档。创作过程中有任何卡点，都可以告诉我，剧本逻辑、分镜设计、图片提示词，都可以和我讨论哦！",
     createdAt: Date.now(),
+  },
+];
+
+const initialHistorySessions: ChatSession[] = [
+  {
+    id: "history-1",
+    title: "帮我梳理这段剧情从压抑到爆发的情绪节奏",
+    preview: "围绕高潮前压抑、爆发、余波三个阶段梳理情绪起伏。",
+    updatedAt: Date.now() - 1000 * 60 * 25,
+    modelId: "claude-3.7",
+    messages: [
+      initialMessages[0],
+      {
+        id: "history-1-user",
+        role: "user",
+        content: "帮我梳理这段剧情的情绪起伏",
+        createdAt: Date.now() - 1000 * 60 * 26,
+      },
+      {
+        id: "history-1-assistant",
+        role: "assistant",
+        modelId: "claude-3.7",
+        content:
+          "可以先按铺垫压抑、冲突升级、情绪爆发、余韵回落这四段来拆，这样更容易定位每个分镜的情绪抓手。",
+        createdAt: Date.now() - 1000 * 60 * 25,
+      },
+    ],
+  },
+  {
+    id: "history-2",
+    title: "这场关键对白还能怎么改得更有情绪张力",
+    preview: "把对白从解释信息改成带情绪和潜台词的对抗。",
+    updatedAt: Date.now() - 1000 * 60 * 80,
+    modelId: "gpt-4.1",
+    messages: [
+      initialMessages[0],
+      {
+        id: "history-2-user",
+        role: "user",
+        content: "这场对白还可以怎么改得更有张力",
+        createdAt: Date.now() - 1000 * 60 * 81,
+      },
+      {
+        id: "history-2-assistant",
+        role: "assistant",
+        modelId: "gpt-4.1",
+        content:
+          "建议减少直接解释，把重点改成试探、反问和打断，让对白像攻防而不是复述信息。",
+        createdAt: Date.now() - 1000 * 60 * 80,
+      },
+    ],
   },
 ];
 
@@ -85,26 +146,35 @@ function buildAgentReply(input: string, modelId: ModelId, history: ChatMessage[]
   ].join("\n\n");
 }
 
-function formatTime(timestamp: number) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(timestamp);
-}
-
 export default function AgentChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
   const [dockSide, setDockSide] = useState<DockSide>("right");
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4.1");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [historySessions, setHistorySessions] = useState<ChatSession[]>(initialHistorySessions);
   const [isThinking, setIsThinking] = useState(false);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, FeedbackType>>({});
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const replyTimerRef = useRef<number | null>(null);
 
   const activeModel = useMemo(() => getModelMeta(selectedModel), [selectedModel]);
   const isRightDock = dockSide === "right";
+  const hasUserSentMessage = messages.some((message) => message.role === "user");
+  const currentSession =
+    hasUserSentMessage
+      ? {
+          id: "current-session",
+          title: "当前对话",
+          preview: messages.find((message) => message.role === "user")?.content ?? "继续当前创作讨论",
+          updatedAt: messages[messages.length - 1]?.createdAt ?? Date.now(),
+          modelId: selectedModel,
+          messages,
+        }
+      : null;
+  const visibleHistorySessions = currentSession ? [currentSession, ...historySessions] : historySessions;
 
   useEffect(() => {
     if (!scrollerRef.current) {
@@ -142,6 +212,7 @@ export default function AgentChatWidget() {
     setMessages(nextMessages);
     setDraft("");
     setIsThinking(true);
+    setIsHistoryOpen(false);
 
     if (replyTimerRef.current !== null) {
       window.clearTimeout(replyTimerRef.current);
@@ -163,38 +234,92 @@ export default function AgentChatWidget() {
     }, 700);
   };
 
+  const startNewConversation = () => {
+    if (replyTimerRef.current !== null) {
+      window.clearTimeout(replyTimerRef.current);
+      replyTimerRef.current = null;
+    }
+
+    if (hasUserSentMessage) {
+      const summaryMessage = messages.find((message) => message.role === "user")?.content ?? "新的创作讨论";
+
+      setHistorySessions((current) => [
+        {
+          id: `history-${Date.now()}`,
+          title: summaryMessage.slice(0, 14) || "未命名对话",
+          preview: summaryMessage,
+          updatedAt: Date.now(),
+          modelId: selectedModel,
+          messages,
+        },
+        ...current.filter((item) => item.id !== "current-session").slice(0, 7),
+      ]);
+    }
+
+    setMessages(initialMessages);
+    setDraft("");
+    setIsThinking(false);
+    setIsComposerExpanded(false);
+    setIsHistoryOpen(false);
+  };
+
+  const openHistorySession = (session: ChatSession) => {
+    if (replyTimerRef.current !== null) {
+      window.clearTimeout(replyTimerRef.current);
+      replyTimerRef.current = null;
+    }
+
+    setMessages(session.messages);
+    setSelectedModel(session.modelId);
+    setDraft("");
+    setIsThinking(false);
+    setIsComposerExpanded(false);
+    setIsHistoryOpen(false);
+  };
+
+  const setFeedback = (messageId: string, feedback: FeedbackType) => {
+    setMessageFeedback((current) => ({
+      ...current,
+      [messageId]: feedback,
+    }));
+  };
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setIsOpen((value) => !value)}
-        className={cn(
-          "fixed top-[96px] z-[60] grid h-9 w-9 place-items-center rounded-full border border-[#d8dce8]",
-          "bg-[#f7f8fc]/96 text-[#3e4a67] shadow-[0_18px_40px_rgba(0,0,0,.18)] backdrop-blur-xl transition hover:border-[#8b95ff] hover:bg-white"
-          ,
-          isRightDock ? "right-3" : "left-3"
-        )}
-        aria-label={isOpen ? "收起 Agent 侧边栏" : "打开 Agent 侧边栏"}
-      >
-        {isRightDock ? (
-          isOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />
-        ) : isOpen ? (
-          <ChevronLeft className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
-        )}
-      </button>
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className={cn(
+            "fixed top-[92px] z-[60] inline-flex h-14 items-center gap-3 rounded-[20px] border border-[#8b95ff]/30 px-3.5",
+            "bg-[linear-gradient(135deg,#7b61ff,#ff4f9a)] text-white shadow-[0_18px_40px_rgba(101,73,211,.32)] backdrop-blur-xl transition hover:brightness-105",
+            isRightDock ? "right-3" : "left-3"
+          )}
+          aria-label="打开 Agent 侧边栏"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-2xl bg-white/16 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.18)]">
+            <MessageSquareMore className="h-4 w-4" />
+          </span>
+          <span className="flex min-w-0 flex-col items-start text-left">
+            <span className="text-[11px] leading-none text-white/72">展开助手</span>
+            <span className="mt-1 text-sm font-semibold leading-none text-white">剧小梦</span>
+          </span>
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/14 text-white">
+            {isRightDock ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </span>
+        </button>
+      ) : null}
 
       <aside
         className={cn(
-          "fixed bottom-0 top-[88px] z-50 flex w-[500px] min-h-0 flex-col overflow-hidden bg-[#f7f8fc]/96 backdrop-blur-xl transition-transform duration-300",
+          "fixed bottom-0 top-[88px] z-50 flex w-[500px] min-h-0 flex-col overflow-hidden bg-[#eef2fb] transition-transform duration-300",
           isRightDock
             ? "right-0 border-l border-[#d9ddea] shadow-[-18px_0_48px_rgba(0,0,0,.16)]"
             : "left-0 border-r border-[#d9ddea] shadow-[18px_0_48px_rgba(0,0,0,.16)]",
           isOpen ? "translate-x-0" : isRightDock ? "translate-x-full" : "-translate-x-full"
         )}
       >
-        <div className="border-b border-[#d9ddea] bg-[linear-gradient(180deg,#ffffff,#eef2fb)] px-4 py-4 pr-12">
+        <div className="relative bg-[#eef2fb] px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -207,7 +332,7 @@ export default function AgentChatWidget() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setDockSide((side) => (side === "right" ? "left" : "right"))}
@@ -219,6 +344,7 @@ export default function AgentChatWidget() {
               </button>
               <button
                 type="button"
+                onClick={startNewConversation}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#d4dced] bg-white px-3 text-xs text-[#526078] transition hover:border-[#8b95ff] hover:bg-[#f7f9ff] hover:text-[#24314d]"
                 aria-label="新建对话"
               >
@@ -227,52 +353,101 @@ export default function AgentChatWidget() {
               </button>
               <button
                 type="button"
+                onClick={() => setIsHistoryOpen((value) => !value)}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#d4dced] bg-white px-3 text-xs text-[#526078] transition hover:border-[#8b95ff] hover:bg-[#f7f9ff] hover:text-[#24314d]"
                 aria-label="历史对话"
               >
                 <History className="h-3.5 w-3.5" />
                 历史
               </button>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#d4dced] bg-white px-3 text-xs text-[#526078] transition hover:border-[#8b95ff] hover:bg-[#f7f9ff] hover:text-[#24314d]"
+                aria-label="收起对话面板"
+              >
+                {isRightDock ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+                收起
+              </button>
             </div>
           </div>
+
+          {isHistoryOpen ? (
+            <div className="absolute right-4 top-[calc(100%-4px)] z-20 w-[280px] overflow-hidden rounded-[20px] border border-[#d7ddea] bg-white shadow-[0_20px_48px_rgba(41,52,79,.18)]">
+              <div className="border-b border-[#e5e9f2] px-4 py-3 text-sm font-semibold text-[#24314d]">历史对话</div>
+              <div className="max-h-[320px] space-y-2 overflow-y-auto p-3">
+                {visibleHistorySessions.map((session) => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => openHistorySession(session)}
+                    className="flex h-11 w-full min-w-0 items-center rounded-2xl border border-[#e2e7f0] bg-[#f9fbff] px-3 text-left transition hover:border-[#8b95ff] hover:bg-white"
+                  >
+                    <span className="block w-full truncate text-sm font-medium text-[#24314d]">{session.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div ref={scrollerRef} className="flex-1 space-y-4 overflow-y-auto bg-[#f4f6fb] px-4 py-4">
+        <div ref={scrollerRef} className="flex-1 space-y-4 overflow-y-auto bg-[#eef2fb] px-4 py-4">
           {messages.map((message) => {
             const isUser = message.role === "user";
+            const showFeedback = !isUser && message.id !== "msg-initial";
+            const feedback = messageFeedback[message.id];
 
             return (
               <div key={message.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[88%] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_10px_28px_rgba(0,0,0,.12)]",
+                    "max-w-[88%] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_10px_28px_rgba(74,85,120,.08)]",
                     isUser
                       ? "border-[#d9c6ff] bg-[linear-gradient(135deg,#7b61ff,#a56dff)] text-white"
                       : "border-[#d7ddea] bg-white text-[#344158]"
                   )}
                 >
                   <div className="whitespace-pre-wrap break-words">{message.content}</div>
-                  <div className={cn("mt-2 flex items-center gap-2 text-[11px]", isUser ? "text-white/75" : "text-[#7a869d]")}>
-                    {!isUser && message.modelId ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d4dced] bg-[#f5f7fc] text-[#5f6b83] transition hover:border-[#8b95ff] hover:text-[#40507a]"
-                          aria-label="点赞"
+                  {showFeedback ? (
+                    <div className={cn("mt-2 flex flex-wrap items-center gap-1.5 text-[11px]", isUser ? "text-white/75" : "text-[#7a869d]")}>
+                      <button
+                        type="button"
+                        onClick={() => setFeedback(message.id, "up")}
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded-full border transition",
+                          feedback === "up"
+                            ? "border-[#7b61ff]/30 bg-[#f1edff] text-[#6b4eff]"
+                            : "border-[#d4dced] bg-[#f5f7fc] text-[#5f6b83] hover:border-[#8b95ff] hover:text-[#40507a]"
+                        )}
+                        aria-label="点赞"
+                      >
+                        <ThumbsUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFeedback(message.id, "down")}
+                        className={cn(
+                          "inline-flex h-6 w-6 items-center justify-center rounded-full border transition",
+                          feedback === "down"
+                            ? "border-[#ff7b9e]/35 bg-[#fff0f4] text-[#e45483]"
+                            : "border-[#d4dced] bg-[#f5f7fc] text-[#5f6b83] hover:border-[#8b95ff] hover:text-[#40507a]"
+                        )}
+                        aria-label="点踩"
+                      >
+                        <ThumbsDown className="h-3 w-3" />
+                      </button>
+                      {feedback ? (
+                        <span
+                          className={cn(
+                            "ml-1 inline-flex items-center rounded-full px-2.5 py-1 text-[11px]",
+                            feedback === "up" ? "bg-[#f1edff] text-[#6b4eff]" : "bg-[#fff0f4] text-[#e45483]"
+                          )}
                         >
-                          <ThumbsUp className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d4dced] bg-[#f5f7fc] text-[#5f6b83] transition hover:border-[#8b95ff] hover:text-[#40507a]"
-                          aria-label="点踩"
-                        >
-                          <ThumbsDown className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : null}
-                    <span>{formatTime(message.createdAt)}</span>
-                  </div>
+                          {feedback === "up" ? "已收到点赞反馈" : "已收到点踩反馈"}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );
@@ -280,7 +455,7 @@ export default function AgentChatWidget() {
 
           {isThinking ? (
             <div className="flex justify-start">
-              <div className="max-w-[88%] rounded-2xl border border-[#d7ddea] bg-white px-4 py-3 text-sm text-[#4d5a72]">
+              <div className="max-w-[88%] rounded-2xl border border-[#d7ddea] bg-white px-4 py-3 text-sm text-[#4d5a72] shadow-[0_10px_28px_rgba(74,85,120,.08)]">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-[#ff4f9a]" />
                   <span>{activeModel.label} 正在组织回复...</span>
@@ -290,28 +465,31 @@ export default function AgentChatWidget() {
           ) : null}
         </div>
 
-        <div className="border-t border-[#d9ddea] bg-[#eef2f9] px-4 py-4">
-          <div className="mb-3 flex flex-col gap-2">
-            {quickPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => submitMessage(prompt)}
-                className="rounded-2xl border border-[#d4dced] bg-white px-3 py-2 text-left text-xs text-[#526078] transition hover:border-[#8b95ff] hover:bg-[#f7f9ff] hover:text-[#24314d]"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
+        <div className="px-3 py-4">
+          {!hasUserSentMessage ? (
+            <div className="mb-4 flex flex-col items-start gap-2">
+              {quickPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => submitMessage(prompt)}
+                  className="inline-flex max-w-full items-center rounded-full border border-[#d4dced] bg-white px-4 py-2 text-left text-xs text-[#526078] shadow-[0_6px_18px_rgba(74,85,120,.06)] transition hover:border-[#8b95ff] hover:bg-[#f7f9ff] hover:text-[#24314d]"
+                >
+                  <span className="break-words">{prompt}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <form
             onSubmit={(event) => {
               event.preventDefault();
               submitMessage();
             }}
-            className="space-y-3"
+            className="rounded-[26px] bg-[#eef2f9] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.45)]"
           >
-            <div className="overflow-hidden rounded-2xl border border-[#d4dced] bg-white shadow-[0_8px_24px_rgba(74,85,120,.08)]">
+            <div className="overflow-hidden rounded-[22px] border border-[#d4dced] bg-white shadow-[0_8px_24px_rgba(74,85,120,.08)]">
+              <div className="relative">
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -321,17 +499,26 @@ export default function AgentChatWidget() {
                     submitMessage();
                   }
                 }}
-                rows={4}
+                rows={5}
                 placeholder="输入你的问题，例如：把时间轴做得更像截图，或者帮我补一个悬浮设置面板..."
-                className="w-full resize-none bg-transparent px-4 py-3 text-sm text-[#24314d] outline-none transition placeholder:text-[#8a94aa]"
+                className="w-full resize-none bg-transparent px-4 py-3.5 pr-14 text-sm text-[#24314d] outline-none transition placeholder:text-[#8a94aa]"
               />
+              <button
+                type="button"
+                onClick={() => setIsComposerExpanded(true)}
+                className="absolute bottom-3 right-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d2d9ea] bg-[#f7f9fd] text-[#5b6780] transition hover:border-[#8b95ff] hover:text-[#24314d]"
+                aria-label="放大提示词框"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+              </div>
 
-              <div className="flex items-center justify-between gap-3 border-t border-[#e1e6f0] px-3 py-2">
+              <div className="flex items-center justify-between gap-3 border-t border-[#e1e6f0] px-3.5 py-2.5">
                 <div className="flex min-w-0 items-center gap-2">
                   <select
                     value={selectedModel}
                     onChange={(event) => setSelectedModel(event.target.value as ModelId)}
-                    className="rounded-full border border-[#d2d9ea] bg-[#f7f9fd] px-3 py-1.5 text-xs text-[#35425c] outline-none"
+                    className="rounded-full border border-[#d2d9ea] bg-[#f7f9fd] px-3.5 py-2 text-xs text-[#35425c] outline-none"
                     aria-label="切换模型"
                   >
                     {modelOptions.map((model) => (
@@ -343,26 +530,15 @@ export default function AgentChatWidget() {
                 </div>
 
                 <button
-                  type="button"
-                  onClick={() => setIsComposerExpanded(true)}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d2d9ea] bg-[#f7f9fd] text-[#5b6780] transition hover:border-[#8b95ff] hover:text-[#24314d]"
-                  aria-label="放大提示词框"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </button>
-
-                <button
                   type="submit"
                   disabled={!draft.trim() || isThinking}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="发送消息"
                 >
                   <SendHorizonal className="h-4 w-4" />
                 </button>
               </div>
             </div>
-
-            <div className="text-xs text-[#7a869d]">Enter 发送，Shift + Enter 换行</div>
           </form>
         </div>
       </aside>
