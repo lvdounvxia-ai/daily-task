@@ -1,3 +1,7 @@
+# 剧小梦分镜编辑器
+
+GitHub Pages 发布路径：`/daily-task/juxiaomeng-editor/`
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
