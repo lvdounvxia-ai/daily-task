@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronLeft, ChevronRight, History, Maximize2, MessageSquareMore, Minimize2, Plus, SendHorizonal, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { AlertCircle, ArrowLeftRight, ChevronLeft, ChevronRight, History, Maximize2, MessageSquareMore, Minimize2, Plus, RotateCcw, SendHorizonal, Sparkles, Square, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ModelId = "gpt-4.1" | "claude-3.7" | "deepseek-r1" | "gemini-2.5";
@@ -19,6 +19,8 @@ interface ChatMessage {
   content: string;
   createdAt: number;
   modelId?: ModelId;
+  status?: "failed" | "generating";
+  requestText?: string;
 }
 
 interface ChatSession {
@@ -28,6 +30,14 @@ interface ChatSession {
   updatedAt: number;
   modelId: ModelId;
   messages: ChatMessage[];
+}
+
+interface PromptCommandTemplate {
+  id: string;
+  slash: string;
+  title: string;
+  description: string;
+  prompt: string;
 }
 
 const modelOptions: ModelOption[] = [
@@ -41,6 +51,47 @@ const quickPrompts = [
   "帮我梳理这段剧情的情绪起伏",
   "检查这个剧本有没有逻辑 bug",
   "这场对白还可以怎么改得更有张力",
+];
+
+const generatingPreviewContent =
+  "我可以继续帮你细化界面结构、补交互，或者把需求拆成可执行的小步骤。\n\n我会继续记住这段对话的";
+
+const promptCommandTemplates: PromptCommandTemplate[] = [
+  {
+    id: "emotion-arc",
+    slash: "/情绪起伏",
+    title: "梳理情绪起伏",
+    description: "分析剧情从铺垫到高潮的情绪变化。",
+    prompt: "帮我梳理这段剧情从铺垫、升级到爆发的情绪起伏，并标出适合强化的分镜节点。",
+  },
+  {
+    id: "logic-check",
+    slash: "/逻辑检查",
+    title: "检查逻辑 bug",
+    description: "排查人物动机、因果与信息前后矛盾。",
+    prompt: "请检查这个剧本有没有逻辑 bug，重点看人物动机、事件因果和信息前后是否矛盾。",
+  },
+  {
+    id: "dialogue-polish",
+    slash: "/对白优化",
+    title: "优化对白张力",
+    description: "把台词改得更有潜台词和冲突感。",
+    prompt: "这场对白还可以怎么改得更有张力？请给我更有潜台词、对抗感和情绪推进的版本。",
+  },
+  {
+    id: "storyboard-prompt",
+    slash: "/分镜提示词",
+    title: "生成分镜提示词",
+    description: "按镜头语言输出可直接使用的提示词。",
+    prompt: "请根据这段剧情帮我生成分镜提示词，包含镜头景别、人物动作、情绪、构图和画面氛围。",
+  },
+  {
+    id: "character-consistency",
+    slash: "/角色一致性",
+    title: "检查角色一致性",
+    description: "校验角色设定、说话方式与行为是否统一。",
+    prompt: "请检查这段内容里的角色设定是否一致，包括说话方式、行为反应和情绪延续是否统一。",
+  },
 ];
 
 const initialMessages: ChatMessage[] = [
@@ -149,6 +200,7 @@ function buildAgentReply(input: string, modelId: ModelId, history: ChatMessage[]
 export default function AgentChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
   const [dockSide, setDockSide] = useState<DockSide>("right");
+  const [panelWidth, setPanelWidth] = useState(500);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4.1");
@@ -156,13 +208,39 @@ export default function AgentChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [historySessions, setHistorySessions] = useState<ChatSession[]>(initialHistorySessions);
   const [isThinking, setIsThinking] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState<Record<string, FeedbackType>>({});
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const replyTimerRef = useRef<number | null>(null);
+  const streamTimerRef = useRef<number | null>(null);
 
   const activeModel = useMemo(() => getModelMeta(selectedModel), [selectedModel]);
   const isRightDock = dockSide === "right";
   const hasUserSentMessage = messages.some((message) => message.role === "user");
+  const hasGeneratingMessage = messages.some((message) => message.status === "generating");
+  const isReplyActive = isThinking || isStreaming || hasGeneratingMessage;
+  const currentSlashCommand = useMemo(() => {
+    const lastLine = draft.split("\n").at(-1)?.trimStart() ?? "";
+    return lastLine.startsWith("/") ? lastLine.slice(1).trim().toLowerCase() : null;
+  }, [draft]);
+  const filteredPromptTemplates = useMemo(() => {
+    if (currentSlashCommand === null) {
+      return [];
+    }
+
+    if (!currentSlashCommand) {
+      return promptCommandTemplates;
+    }
+
+    return promptCommandTemplates.filter((template) =>
+      [template.slash, template.title, template.description, template.prompt]
+        .join(" ")
+        .toLowerCase()
+        .includes(currentSlashCommand)
+    );
+  }, [currentSlashCommand]);
   const currentSession =
     hasUserSentMessage
       ? {
@@ -189,13 +267,45 @@ export default function AgentChatWidget() {
       if (replyTimerRef.current !== null) {
         window.clearTimeout(replyTimerRef.current);
       }
+      if (streamTimerRef.current !== null) {
+        window.clearInterval(streamTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    const clampPanelWidth = () => {
+      const maxWidth = Math.max(420, Math.min(720, window.innerWidth - 220));
+      setPanelWidth((current) => Math.min(Math.max(current, 420), maxWidth));
+    };
+
+    clampPanelWidth();
+    window.addEventListener("resize", clampPanelWidth);
+
+    return () => {
+      window.removeEventListener("resize", clampPanelWidth);
+    };
+  }, []);
+
+  const stopReplyGeneration = () => {
+    if (replyTimerRef.current !== null) {
+      window.clearTimeout(replyTimerRef.current);
+      replyTimerRef.current = null;
+    }
+
+    if (streamTimerRef.current !== null) {
+      window.clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
+
+    setIsThinking(false);
+    setIsStreaming(false);
+  };
 
   const submitMessage = (rawText?: string) => {
     const text = (rawText ?? draft).trim();
 
-    if (!text || isThinking) {
+    if (!text || isReplyActive) {
       return;
     }
 
@@ -212,33 +322,116 @@ export default function AgentChatWidget() {
     setMessages(nextMessages);
     setDraft("");
     setIsThinking(true);
+    setIsStreaming(false);
     setIsHistoryOpen(false);
 
-    if (replyTimerRef.current !== null) {
-      window.clearTimeout(replyTimerRef.current);
-    }
+    stopReplyGeneration();
+    setIsThinking(true);
 
     replyTimerRef.current = window.setTimeout(() => {
+      const shouldFail = text.includes("生成失败");
+      const shouldShowGenerating = text.includes("生成中");
+
+      if (shouldFail) {
+        setMessages([
+          ...nextMessages,
+          {
+            id: `msg-assistant-failed-${Date.now()}`,
+            role: "assistant",
+            content: "本次内容生成失败，请检查描述后重试，或直接重新生成。",
+            createdAt: Date.now(),
+            modelId: selectedModel,
+            status: "failed",
+            requestText: text,
+          },
+        ]);
+        setIsThinking(false);
+        replyTimerRef.current = null;
+        return;
+      }
+
+      if (shouldShowGenerating) {
+        setMessages([
+          ...nextMessages,
+          {
+            id: `msg-assistant-generating-${Date.now()}`,
+            role: "assistant",
+            content: generatingPreviewContent,
+            createdAt: Date.now(),
+            modelId: selectedModel,
+            status: "generating",
+            requestText: text,
+          },
+        ]);
+        setIsThinking(false);
+        replyTimerRef.current = null;
+        return;
+      }
+
+      const fullReply = buildAgentReply(text, selectedModel, nextMessages);
+      const assistantMessageId = `msg-assistant-${Date.now()}`;
+      const chunkSize = 3;
+      let cursor = 0;
+
       setMessages([
         ...nextMessages,
         {
-          id: `msg-assistant-${Date.now()}`,
+          id: assistantMessageId,
           role: "assistant",
-          content: buildAgentReply(text, selectedModel, nextMessages),
+          content: "",
           createdAt: Date.now(),
           modelId: selectedModel,
         },
       ]);
       setIsThinking(false);
+      setIsStreaming(true);
       replyTimerRef.current = null;
-    }, 700);
+
+      streamTimerRef.current = window.setInterval(() => {
+        cursor = Math.min(cursor + chunkSize, fullReply.length);
+        const partialReply = fullReply.slice(0, cursor);
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantMessageId ? { ...message, content: partialReply } : message
+          )
+        );
+
+        if (cursor >= fullReply.length) {
+          if (streamTimerRef.current !== null) {
+            window.clearInterval(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          setIsStreaming(false);
+        }
+      }, 26);
+    }, 480);
+  };
+
+  const retryFailedGeneration = (requestText?: string) => {
+    if (!requestText || isReplyActive) {
+      return;
+    }
+
+    setMessages((current) => current.filter((message) => message.requestText !== requestText || message.status !== "failed"));
+    setDraft(requestText);
+
+    window.setTimeout(() => {
+      submitMessage(requestText);
+    }, 0);
+  };
+
+  const interruptGeneration = () => {
+    stopReplyGeneration();
+    setMessages((current) =>
+      current.map((message) =>
+        message.status === "generating" ? { ...message, status: undefined } : message
+      )
+    );
   };
 
   const startNewConversation = () => {
-    if (replyTimerRef.current !== null) {
-      window.clearTimeout(replyTimerRef.current);
-      replyTimerRef.current = null;
-    }
+    stopReplyGeneration();
 
     if (hasUserSentMessage) {
       const summaryMessage = messages.find((message) => message.role === "user")?.content ?? "新的创作讨论";
@@ -258,21 +451,16 @@ export default function AgentChatWidget() {
 
     setMessages(initialMessages);
     setDraft("");
-    setIsThinking(false);
     setIsComposerExpanded(false);
     setIsHistoryOpen(false);
   };
 
   const openHistorySession = (session: ChatSession) => {
-    if (replyTimerRef.current !== null) {
-      window.clearTimeout(replyTimerRef.current);
-      replyTimerRef.current = null;
-    }
+    stopReplyGeneration();
 
     setMessages(session.messages);
     setSelectedModel(session.modelId);
     setDraft("");
-    setIsThinking(false);
     setIsComposerExpanded(false);
     setIsHistoryOpen(false);
   };
@@ -282,6 +470,58 @@ export default function AgentChatWidget() {
       ...current,
       [messageId]: feedback,
     }));
+  };
+
+  const triggerCommandInput = () => {
+    setDraft((current) => (current.trim() ? `${current}\n/调用命令 ` : "/调用命令 "));
+
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
+  const applyPromptTemplate = (template: PromptCommandTemplate) => {
+    setDraft((current) => {
+      const lines = current.split("\n");
+      const lastLine = lines.at(-1)?.trimStart() ?? "";
+
+      if (lastLine.startsWith("/")) {
+        lines[lines.length - 1] = template.prompt;
+        return lines.join("\n");
+      }
+
+      return current.trim() ? `${current}\n${template.prompt}` : template.prompt;
+    });
+
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
+  const startResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const minWidth = 420;
+    const maxWidth = Math.max(minWidth, Math.min(720, window.innerWidth - 220));
+
+    setIsResizing(true);
+
+    const handlePointerMove = (moveEvent: MouseEvent) => {
+      const nextWidth =
+        dockSide === "right" ? window.innerWidth - moveEvent.clientX : moveEvent.clientX;
+
+      setPanelWidth(Math.min(Math.max(nextWidth, minWidth), maxWidth));
+    };
+
+    const stopResize = () => {
+      setIsResizing(false);
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", stopResize);
+    };
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", stopResize);
   };
 
   return (
@@ -312,13 +552,33 @@ export default function AgentChatWidget() {
 
       <aside
         className={cn(
-          "fixed bottom-0 top-[88px] z-50 flex w-[500px] min-h-0 flex-col overflow-hidden bg-[#eef2fb] transition-transform duration-300",
+          "group fixed bottom-0 top-[88px] z-50 flex min-h-0 flex-col overflow-hidden bg-[#eef2fb] transition-transform duration-300",
           isRightDock
             ? "right-0 border-l border-[#d9ddea] shadow-[-18px_0_48px_rgba(0,0,0,.16)]"
             : "left-0 border-r border-[#d9ddea] shadow-[18px_0_48px_rgba(0,0,0,.16)]",
           isOpen ? "translate-x-0" : isRightDock ? "translate-x-full" : "-translate-x-full"
         )}
+        style={{ width: `${panelWidth}px` }}
       >
+        <button
+          type="button"
+          onMouseDown={startResize}
+          className={cn(
+            "absolute bottom-0 top-0 z-30 w-3 cursor-col-resize transition",
+            isRightDock ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2",
+            isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+          aria-label="拖拽调整 Agent 宽度"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 rounded-full bg-[#8b95ff]/0 transition group-hover:bg-[#8b95ff]/60" />
+          <span
+            className={cn(
+              "absolute left-1/2 top-1/2 h-16 w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#8b95ff] shadow-[0_8px_20px_rgba(123,97,255,.28)] transition",
+              isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}
+          />
+        </button>
+
         <div className="relative bg-[#eef2fb] px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -394,7 +654,9 @@ export default function AgentChatWidget() {
         <div ref={scrollerRef} className="flex-1 space-y-4 overflow-y-auto bg-[#eef2fb] px-4 py-4">
           {messages.map((message) => {
             const isUser = message.role === "user";
-            const showFeedback = !isUser && message.id !== "msg-initial";
+            const isFailed = message.status === "failed";
+            const isGeneratingState = message.status === "generating";
+            const showFeedback = !isUser && message.id !== "msg-initial" && !isFailed && !isGeneratingState;
             const feedback = messageFeedback[message.id];
 
             return (
@@ -404,10 +666,36 @@ export default function AgentChatWidget() {
                     "max-w-[88%] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_10px_28px_rgba(74,85,120,.08)]",
                     isUser
                       ? "border-[#d9c6ff] bg-[linear-gradient(135deg,#7b61ff,#a56dff)] text-white"
-                      : "border-[#d7ddea] bg-white text-[#344158]"
+                      : isFailed
+                        ? "border-[#ffd6de] bg-[#fff7f9] text-[#8c3c56]"
+                        : "border-[#d7ddea] bg-white text-[#344158]"
                   )}
                 >
-                  <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                  {isFailed ? (
+                    <div className="mb-2 flex items-center gap-2 text-[#e45483]">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm font-semibold">生成失败</span>
+                    </div>
+                  ) : null}
+                  <div className="whitespace-pre-wrap break-words">
+                    {message.content || (!isUser && isStreaming ? "正在输出..." : "")}
+                    {isGeneratingState ? (
+                      <span className="ml-1 inline-block h-4 w-2 rounded-full bg-[#7b61ff]/60 align-middle animate-pulse" />
+                    ) : null}
+                  </div>
+                  {isFailed ? (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => retryFailedGeneration(message.requestText)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#f0b8c8] bg-white px-3 text-xs font-medium text-[#b9456d] transition hover:border-[#e45483] hover:text-[#8c3c56]"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        重新生成
+                      </button>
+                      <span className="text-[11px] text-[#c06a86]">你也可以修改描述后再次发送</span>
+                    </div>
+                  ) : null}
                   {showFeedback ? (
                     <div className={cn("mt-2 flex flex-wrap items-center gap-1.5 text-[11px]", isUser ? "text-white/75" : "text-[#7a869d]")}>
                       <button
@@ -481,21 +769,59 @@ export default function AgentChatWidget() {
             </div>
           ) : null}
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitMessage();
-            }}
-            className="rounded-[26px] bg-[#eef2f9] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.45)]"
-          >
+          <div className="relative">
+            {currentSlashCommand !== null ? (
+              <div className="absolute bottom-full left-0 right-0 z-20 mb-3 overflow-hidden rounded-[22px] border border-[#d7ddea] bg-white shadow-[0_18px_40px_rgba(41,52,79,.14)]">
+                <div className="border-b border-[#edf1f7] px-4 py-3 text-xs font-medium text-[#6b7690]">
+                  可调用的 Prompt 模板
+                </div>
+                <div className="max-h-[260px] overflow-y-auto p-2">
+                  {filteredPromptTemplates.length > 0 ? (
+                    filteredPromptTemplates.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => applyPromptTemplate(template)}
+                        className="flex w-full items-start gap-3 rounded-[16px] px-3 py-3 text-left transition hover:bg-[#f6f8ff]"
+                      >
+                        <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-[#f2f5fb] px-2.5 text-xs font-semibold text-[#55627b]">
+                          {template.slash}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-[#24314d]">{template.title}</span>
+                          <span className="mt-1 block text-xs leading-5 text-[#77839b]">{template.description}</span>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-sm text-[#7a869d]">没有匹配的模板，试试输入更短一点的关键词。</div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitMessage();
+              }}
+              className="rounded-[26px] bg-[#eef2f9] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.45)]"
+            >
             <div className="overflow-hidden rounded-[22px] border border-[#d4dced] bg-white shadow-[0_8px_24px_rgba(74,85,120,.08)]">
               <div className="relative">
               <textarea
+                ref={textareaRef}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
+                    if (currentSlashCommand !== null) {
+                      if (filteredPromptTemplates.length > 0) {
+                        applyPromptTemplate(filteredPromptTemplates[0]);
+                      }
+                      return;
+                    }
                     submitMessage();
                   }
                 }}
@@ -527,19 +853,34 @@ export default function AgentChatWidget() {
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={triggerCommandInput}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d2d9ea] bg-[#f7f9fd] text-sm font-semibold text-[#35425c] transition hover:border-[#8b95ff] hover:bg-white hover:text-[#24314d]"
+                    aria-label="调用命令"
+                  >
+                    /
+                  </button>
                 </div>
 
                 <button
-                  type="submit"
-                  disabled={!draft.trim() || isThinking}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="发送消息"
+                  type={isReplyActive ? "button" : "submit"}
+                  onClick={isReplyActive ? interruptGeneration : undefined}
+                  disabled={!isReplyActive && !draft.trim()}
+                  className={cn(
+                    "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50",
+                    isReplyActive
+                      ? "bg-[#fff1f4] text-[#e45483] shadow-[0_10px_20px_rgba(228,84,131,.18)] hover:bg-[#ffe4ec]"
+                      : "bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] hover:brightness-110"
+                  )}
+                  aria-label={isReplyActive ? "打断生成" : "发送消息"}
                 >
-                  <SendHorizonal className="h-4 w-4" />
+                  {isReplyActive ? <Square className="h-3.5 w-3.5 fill-current" /> : <SendHorizonal className="h-4 w-4" />}
                 </button>
               </div>
             </div>
-          </form>
+            </form>
+          </div>
         </div>
       </aside>
 
@@ -562,13 +903,48 @@ export default function AgentChatWidget() {
               </button>
             </div>
 
-            <div className="flex-1 bg-[#f7f9fd] p-5">
+            <div className="relative flex-1 bg-[#f7f9fd] p-5">
+              {currentSlashCommand !== null ? (
+                <div className="absolute left-5 right-5 top-5 z-20 overflow-hidden rounded-[22px] border border-[#d7ddea] bg-white shadow-[0_18px_40px_rgba(41,52,79,.14)]">
+                  <div className="border-b border-[#edf1f7] px-4 py-3 text-xs font-medium text-[#6b7690]">可调用的 Prompt 模板</div>
+                  <div className="max-h-[260px] overflow-y-auto p-2">
+                    {filteredPromptTemplates.length > 0 ? (
+                      filteredPromptTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyPromptTemplate(template)}
+                          className="flex w-full items-start gap-3 rounded-[16px] px-3 py-3 text-left transition hover:bg-[#f6f8ff]"
+                        >
+                          <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-[#f2f5fb] px-2.5 text-xs font-semibold text-[#55627b]">
+                            {template.slash}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-[#24314d]">{template.title}</span>
+                            <span className="mt-1 block text-xs leading-5 text-[#77839b]">{template.description}</span>
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-sm text-[#7a869d]">没有匹配的模板，试试输入更短一点的关键词。</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <textarea
+                ref={textareaRef}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
+                    if (currentSlashCommand !== null) {
+                      if (filteredPromptTemplates.length > 0) {
+                        applyPromptTemplate(filteredPromptTemplates[0]);
+                      }
+                      return;
+                    }
                     submitMessage();
                     setIsComposerExpanded(false);
                   }
@@ -592,6 +968,14 @@ export default function AgentChatWidget() {
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  onClick={triggerCommandInput}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d2d9ea] bg-[#f7f9fd] text-sm font-semibold text-[#35425c] transition hover:border-[#8b95ff] hover:bg-white hover:text-[#24314d]"
+                  aria-label="调用命令"
+                >
+                  /
+                </button>
                 <div className="truncate text-[11px] text-[#7a869d]">{activeModel.hint}</div>
               </div>
 
@@ -605,15 +989,24 @@ export default function AgentChatWidget() {
                 </button>
                 <button
                   type="button"
-                  disabled={!draft.trim() || isThinking}
+                  disabled={!isReplyActive && !draft.trim()}
                   onClick={() => {
+                    if (isReplyActive) {
+                      interruptGeneration();
+                      return;
+                    }
                     submitMessage();
                     setIsComposerExpanded(false);
                   }}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] px-4 text-sm text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm transition disabled:cursor-not-allowed disabled:opacity-50",
+                    isReplyActive
+                      ? "bg-[#fff1f4] text-[#e45483] shadow-[0_10px_20px_rgba(228,84,131,.18)] hover:bg-[#ffe4ec]"
+                      : "bg-gradient-to-r from-[#7b61ff] to-[#ff4f9a] text-white shadow-[0_12px_24px_rgba(255,79,154,.24)] hover:brightness-110"
+                  )}
                 >
-                  <SendHorizonal className="h-4 w-4" />
-                  发送
+                  {isReplyActive ? <Square className="h-3.5 w-3.5 fill-current" /> : <SendHorizonal className="h-4 w-4" />}
+                  {isReplyActive ? "打断" : "发送"}
                 </button>
               </div>
             </div>
