@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mockAssets, mockHistory, type AssetTab } from "@/mock/editorMock";
+import { mockHistory, type AssetTab } from "@/mock/editorMock";
 import { useEditorStore } from "@/stores/editorStore";
 
 const tabs: AssetTab[] = ["角色", "场景", "道具", "历史"];
@@ -12,6 +12,7 @@ function AssetRow({
   subtitle,
   count,
   active,
+  testId,
   onClick,
 }: {
   imageUrl?: string;
@@ -19,11 +20,13 @@ function AssetRow({
   subtitle?: string;
   count?: number;
   active: boolean;
+  testId?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      data-testid={testId}
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 rounded-[10px] border p-2 text-left transition",
@@ -47,13 +50,14 @@ function AssetRow({
 
 export default function AssetPanel({ className }: { className?: string }) {
   const assetTab = useEditorStore((s) => s.assetTab);
+  const assets = useEditorStore((s) => s.assets);
   const selectedAsset = useEditorStore((s) => s.selectedAsset);
   const { setAssetTab, selectAsset } = useEditorStore((s) => s.actions);
 
   const list =
     assetTab === "历史"
       ? []
-      : mockAssets
+      : assets
           .filter((a) => a.kind === assetTab)
           .sort((a, b) => roleOrder.indexOf(a.name) - roleOrder.indexOf(b.name));
 
@@ -116,6 +120,7 @@ export default function AssetPanel({ className }: { className?: string }) {
                 subtitle={item.subtitle}
                 count={item.count}
                 active={selectedAsset?.id === item.id}
+                testId={`asset-row-${item.id}`}
                 onClick={() => selectAsset(item.id)}
               />
             ))}
