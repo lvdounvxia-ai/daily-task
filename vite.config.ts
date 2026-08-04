@@ -4,8 +4,9 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/daily-task/juxiaomeng-editor/" : "/",
+export default defineConfig(() => ({
+  // GitHub Pages builds can opt in with DEPLOY_TARGET=github-pages.
+  base: process.env.DEPLOY_TARGET === "github-pages" ? "/daily-task/juxiaomeng-editor/" : "/",
   build: {
     sourcemap: 'hidden',
   },
